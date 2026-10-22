@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AMD 線上議程 | 會後幸運抽獎</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS for Excel parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        amdRed: '#ED1C24',
+                        darkBg: '#0f0f0f',
+                        darkPanel: '#1a1a1a',
+                        darkBorder: '#333333'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'Microsoft JhengHei', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #0f0f0f;
+            color: #ffffff;
+            /* Prevent accidental selections during fast clicks */
+            user-select: none; 
+        }
+        .glass-panel {
+            background: rgba(26, 26, 26, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid #333;
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f0f0f;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        
+        .slot-machine-text {
+            display: inline-block;
+            min-width: 300px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans">
+
+    <!-- Navbar -->
+    <header class="flex justify-between items-center px-8 py-4 border-b border-darkBorder bg-darkBg z-10 sticky top-0">
+        <div class="flex items-center space-x-4">
+            <!-- Mock AMD Logo -->
+            <div class="text-3xl font-black tracking-tighter">AMD</div>
+            <div class="w-px h-6 bg-gray-600"></div>
+            <div class="text-sm tracking-widest text-gray-400">LUCKY DRAW</div>
+        </div>
+        <div class="flex space-x-4 text-xs">
+            <span class="flex items-center text-gray-400 border border-gray-700 px-3 py-1.5 rounded-full">
+                <span class="w-2 h-2 rounded-full bg-green-500 mr-2"></span> 資料僅在本機處理
+            </span>
+            <button onclick="toggleFullScreen()" class="border border-gray-700 hover:border-gray-500 transition px-3 py-1.5 rounded-full">全螢幕</button>
+        </div>
+    </header>
+
+    <!-- MAIN APP CONTAINER -->
+    <main class="flex-grow p-8 max-w-7xl mx-auto w-full flex flex-col transition-all duration-500" id="app-container">
+        
+        <!-- ==================== PHASE 1: SETUP ==================== -->
+        <div id="view-setup" class="flex-grow flex flex-col block">
+            <div class="mb-10">
+                <p class="text-amdRed text-sm font-bold tracking-widest mb-2">AFTER THE SESSION, YOUR LUCK BEGINS.</p>
+                <h1 class="text-4xl md:text-5xl font-bold mb-4">精彩落幕，好運登場。</h1>
+                <p class="text-gray-400">準備好名單與獎品，讓下一份驚喜就位。</p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Left Column: Uploads -->
+                <div class="lg:col-span-2 space-y-6">
+                    <div class="glass-panel p-6 rounded-2xl">
+                        <h2 class="text-xl font-bold mb-4 border-b border-gray-700 pb-2">活動與抽獎資料</h2>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                            <!-- Participants Upload -->
+                            <div class="border border-dashed border-gray-600 rounded-xl p-6 relative hover:border-gray-400 transition">
+                                <div class="bg-darkBg text-amdRed w-8 h-8 rounded-full flex items-center justify-center font-bold mb-4">01</div>
+                                <h3 class="text-lg font-bold mb-1">參加者名單</h3>
+                                <p class="text-xs text-gray-500 mb-4">欄位需含：參與者編號、姓名、手機號碼</p>
+                                <input type="file" id="file-participants" accept=".xlsx, .xls" class="hidden" onchange="handleFileUpload(event, 'participants')">
+                                <label for="file-participants" class="cursor-pointer inline-block bg-gray-800 hover:bg-gray-700 px-4 py-2 rounded-lg text-sm transition">
+                                    選擇檔案
+                                </label>
+                                <span id="status-participants" class="text-sm text-gray-400 ml-3">尚未匯入名單</span>
+                            </div>
+
+                            <!-- Prizes Upload -->
+                            <div class="border border-dashed border-gray-600 rounded-xl p-6 relative hover:border-gray-400 transition">
+                                <div class="bg-darkBg text-amdRed w-8 h-8 rounded-full flex items-center justify-center font-bold mb-4">02</div>
+                                <h3 class="text-lg font-bold mb-1">獎品清單</h3>
+                                <p class="text-xs text-gray-500 mb-4">欄位需含：獎品代碼、獎品名稱、數量</p>
+                                <input type="file" id="file-prizes" accept=".xlsx, .xls" class="hidden" onchange="handleFileUpload(event, 'prizes')">
+                                <label for="file-prizes" class="cursor-pointer inline-block bg-gray-800 hover:bg-gray-700 px-4 py-2 rounded-lg text-sm transition">
+                                    選擇檔案
+                                </label>
+                                <span id="status-prizes" class="text-sm text-gray-400 ml-3">尚未匯入獎品</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: Status & Start -->
+                <div class="glass-panel p-6 rounded-2xl flex flex-col justify-between">
+                    <div>
+                        <h2 class="text-sm text-gray-400 mb-2">03 / 確認抽獎順序</h2>
+                        <h3 class="text-3xl font-bold mb-8">好運準備中</h3>
+                        
+                        <div class="flex justify-between border-b border-gray-700 pb-4 mb-4">
+                            <div>
+                                <div class="text-4xl font-light text-white" id="count-participants">--</div>
+                                <div class="text-xs text-gray-500 mt-1">有效參加者</div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-4xl font-light text-white" id="count-prizes">--</div>
+                                <div class="text-xs text-gray-500 mt-1">總中獎名額</div>
+                            </div>
+                        </div>
+                        <p class="text-sm text-gray-400">匯入獎品與名單後，將依獎品代碼排序進行抽獎。</p>
+                    </div>
+                    
+                    <div class="mt-8">
+                        <button id="btn-enter-draw" disabled onclick="enterDrawMode()" class="w-full bg-gray-800 text-gray-500 cursor-not-allowed py-4 rounded-xl font-bold transition duration-300">
+                            請先完成資料檢查
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== PHASE 2: DRAW ==================== -->
+        <div id="view-draw" class="flex-grow flex flex-col hidden h-full justify-center items-center relative">
+            
+            <div class="absolute top-0 left-0 w-full flex justify-between items-center text-sm text-gray-400 mb-8">
+                <div>當前進度：<span id="draw-progress" class="text-white font-bold">0 / 0</span></div>
+                <button onclick="endDrawEarly()" class="text-gray-500 hover:text-white transition underline">提早結束抽獎</button>
+            </div>
+
+            <!-- Prize Display -->
+            <div class="text-center mt-12 mb-12">
+                <p class="text-amdRed text-xl font-bold tracking-widest mb-2" id="current-prize-code">PRIZE CODE</p>
+                <h2 class="text-5xl md:text-6xl font-black mb-4" id="current-prize-name">準備抽出獎項...</h2>
+                <div class="inline-block px-4 py-1 rounded-full border border-gray-700 text-gray-300 text-sm">
+                    此獎項剩餘：<span id="current-prize-remaining" class="font-bold text-white">0</span>
+                </div>
+            </div>
+
+            <!-- Winner Display Box -->
+            <div class="w-full max-w-3xl h-48 bg-darkPanel border border-darkBorder rounded-3xl flex flex-col justify-center items-center shadow-2xl relative overflow-hidden mb-12">
+                <!-- Decorative accents -->
+                <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-amdRed to-transparent opacity-50"></div>
+                
+                <div id="winner-display" class="text-3xl md:text-5xl font-mono font-bold text-gray-500 tracking-wider">
+                    等待抽獎指令
+                </div>
+            </div>
+
+            <!-- Action Button -->
+            <button id="btn-draw" onclick="startDraw()" class="bg-amdRed hover:bg-red-700 text-white px-12 py-5 rounded-2xl text-2xl font-bold shadow-[0_0_20px_rgba(237,28,36,0.3)] hover:shadow-[0_0_30px_rgba(237,28,36,0.5)] transition duration-300 transform active:scale-95">
+                抽出幸運兒
+            </button>
+        </div>
+
+        <!-- ==================== PHASE 3: RESULTS ==================== -->
+        <div id="view-results" class="flex-grow flex flex-col hidden h-full">
+            <div class="text-center mb-10">
+                <p class="text-amdRed text-sm font-bold tracking-widest mb-2">CONGRATULATIONS</p>
+                <h2 class="text-4xl font-bold mb-4">抽獎活動圓滿結束</h2>
+                <p class="text-gray-400">以下為本次活動所有得獎名單。</p>
+            </div>
+
+            <div class="flex-grow bg-darkPanel border border-darkBorder rounded-2xl p-6 overflow-y-auto max-h-[50vh] mb-8">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="text-gray-400 text-sm border-b border-gray-800">
+                            <th class="pb-3 font-medium">獎品代碼</th>
+                            <th class="pb-3 font-medium">獎品名稱</th>
+                            <th class="pb-3 font-medium">中獎者編號</th>
+                            <th class="pb-3 font-medium">中獎者姓名</th>
+                            <th class="pb-3 font-medium">聯絡電話</th>
+                        </tr>
+                    </thead>
+                    <tbody id="results-table-body" class="text-sm">
+                        <!-- Populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="flex justify-center space-x-6">
+                <button onclick="location.reload()" class="border border-gray-600 hover:border-gray-400 px-8 py-3 rounded-xl transition">
+                    重新開始 (清除資料)
+                </button>
+                <button onclick="downloadCSV()" class="bg-white text-black hover:bg-gray-200 px-8 py-3 rounded-xl font-bold transition shadow-lg">
+                    下載完整得獎名單 (.csv)
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        // --- State Management ---
+        let participants = []; // { id, name, phone }
+        let prizesList = [];   // Array of single prizes expanded from quantity
+        let winners = [];      // { prizeCode, prizeName, participantId, name, phone }
+        let currentDrawIndex = 0; // Tracks which prize we are drawing
+        let isDrawing = false;
+
+        // --- Helper: Format and Masking ---
+        // Masks name: 王曉明 -> 王O明, 陳大 -> 陳O, 張三豐四 -> 張OO四
+        function maskName(name) {
+            if (!name) return "無名氏";
+            const str = String(name).trim();
+            if (str.length <= 1) return str;
+            if (str.length === 2) return str[0] + 'O';
+            return str[0] + 'O'.repeat(str.length - 2) + str[str.length - 1];
+        }
+
+        // Masks phone: 0912345678 -> 678
+        function maskPhone(phone) {
+            if (!phone) return "000";
+            const str = String(phone).trim();
+            return str.length >= 3 ? str.slice(-3) : str;
+        }
+
+        // Generate masked display string
+        function getMaskedDisplay(p) {
+            return `${maskName(p.name)} <span class="text-xl md:text-2xl text-gray-400 ml-4">手機末三碼：${maskPhone(p.phone)}</span>`;
+        }
+
+        // --- File Upload & Parsing (SheetJS) ---
+        function handleFileUpload(event, type) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                const json = XLSX.utils.sheet_to_json(worksheet);
+
+                if (type === 'participants') {
+                    parseParticipants(json, file.name);
+                } else if (type === 'prizes') {
+                    parsePrizes(json, file.name);
+                }
+                
+                checkReadyStatus();
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function parseParticipants(data, filename) {
+            participants = [];
+            data.forEach(row => {
+                // Look for keys matching required columns (fuzzy matching can be added, strict for now)
+                const id = row['參與者編號'] || row['編號'] || row['ID'];
+                const name = row['姓名'] || row['Name'];
+                const phone = row['手機號碼'] || row['電話'] || row['Phone'];
+                
+                if (name && phone) {
+                    participants.push({ id: id || '-', name, phone });
+                }
+            });
+
+            document.getElementById('status-participants').innerText = `${filename} (共 ${participants.length} 筆)`;
+            document.getElementById('status-participants').classList.replace('text-gray-400', 'text-green-400');
+            document.getElementById('count-participants').innerText = participants.length;
+        }
+
+        function parsePrizes(data, filename) {
+            prizesList = [];
+            let totalPrizes = 0;
+            
+            // Expected columns: 獎品代碼, 獎品名稱, 數量
+            data.forEach(row => {
+                const code = row['獎品代碼'] || row['代碼'] || '-';
+                const name = row['獎品名稱'] || row['名稱'] || '未命名獎品';
+                const qty = parseInt(row['數量'] || row['Qty'] || 1);
+                
+                if (qty > 0 && name) {
+                    totalPrizes += qty;
+                    // Expand quantity into individual drawable items
+                    for(let i=0; i<qty; i++) {
+                        prizesList.push({
+                            code: code,
+                            name: name,
+                            groupTotal: qty,
+                            groupIndex: i + 1
+                        });
+                    }
+                }
+            });
+
+            document.getElementById('status-prizes').innerText = `${filename} (共 ${totalPrizes} 個獎項)`;
+            document.getElementById('status-prizes').classList.replace('text-gray-400', 'text-green-400');
+            document.getElementById('count-prizes').innerText = totalPrizes;
+        }
+
+        function checkReadyStatus() {
+            const btn = document.getElementById('btn-enter-draw');
+            if (participants.length > 0 && prizesList.length > 0) {
+                if (participants.length < prizesList.length) {
+                    alert('警告：參加人數少於獎品總數！');
+                }
+                btn.disabled = false;
+                btn.className = "w-full bg-amdRed hover:bg-red-700 text-white py-4 rounded-xl font-bold transition duration-300 shadow-lg";
+                btn.innerText = "進入抽獎 →";
+            }
+        }
+
+        // --- Navigation ---
+        function switchView(viewId) {
+            ['view-setup', 'view-draw', 'view-results'].forEach(id => {
+                document.getElementById(id).classList.add('hidden');
+            });
+            document.getElementById(viewId).classList.remove('hidden');
+        }
+
+        function enterDrawMode() {
+            if (participants.length === 0 || prizesList.length === 0) return;
+            switchView('view-draw');
+            updateDrawUI();
+        }
+
+        function endDrawEarly() {
+            if(confirm("確定要提早結束抽獎嗎？未抽出的獎項將作廢。")) {
+                showResults();
+            }
+        }
+
+        // --- Draw Logic ---
+        function updateDrawUI() {
+            if (currentDrawIndex >= prizesList.length || participants.length === 0) {
+                showResults();
+                return;
+            }
+
+            const currentPrize = prizesList[currentDrawIndex];
+            document.getElementById('current-prize-code').innerText = `PRIZE CODE: ${currentPrize.code}`;
+            document.getElementById('current-prize-name').innerText = currentPrize.name;
+            
+            // Calculate remaining of THIS specific prize group
+            const remaining = prizesList.filter((p, idx) => idx >= currentDrawIndex && p.code === currentPrize.code).length;
+            document.getElementById('current-prize-remaining').innerText = remaining;
+            
+            document.getElementById('draw-progress').innerText = `${currentDrawIndex} / ${prizesList.length}`;
+            document.getElementById('winner-display').innerHTML = '<span class="text-gray-600">等待抽獎指令</span>';
+            document.getElementById('winner-display').classList.remove('text-white');
+        }
+
+        function startDraw() {
+            if (isDrawing || currentDrawIndex >= prizesList.length || participants.length === 0) return;
+            
+            isDrawing = true;
+            const btn = document.getElementById('btn-draw');
+            btn.disabled = true;
+            btn.classList.add('opacity-50', 'cursor-not-allowed');
+            btn.innerText = "抽取中...";
+
+            const display = document.getElementById('winner-display');
+            display.classList.add('text-white');
+
+            // Slot machine animation effect
+            let ticks = 0;
+            const maxTicks = 20; // 20 frames * 75ms = 1.5 seconds
+            const speed = 75; 
+
+            const slotInterval = setInterval(() => {
+                // Show random participant during animation
+                const randomP = participants[Math.floor(Math.random() * participants.length)];
+                display.innerHTML = getMaskedDisplay(randomP);
+                ticks++;
+
+                if (ticks >= maxTicks) {
+                    clearInterval(slotInterval);
+                    finishSingleDraw();
+                }
+            }, speed);
+        }
+
+        function finishSingleDraw() {
+            // Select actual winner
+            const winnerIndex = Math.floor(Math.random() * participants.length);
+            const winner = participants.splice(winnerIndex, 1)[0]; // Remove from pool (1 win per person)
+            const currentPrize = prizesList[currentDrawIndex];
+
+            // Save result
+            winners.push({
+                prizeCode: currentPrize.code,
+                prizeName: currentPrize.name,
+                participantId: winner.id,
+                name: winner.name,
+                phone: winner.phone
+            });
+
+            // Update UI
+            document.getElementById('winner-display').innerHTML = 
+                `<div class="animate-pulse text-amdRed">${getMaskedDisplay(winner)}</div>`;
+
+            currentDrawIndex++;
+
+            // Reset button
+            const btn = document.getElementById('btn-draw');
+            
+            setTimeout(() => {
+                isDrawing = false;
+                if (currentDrawIndex < prizesList.length && participants.length > 0) {
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                    btn.innerText = "抽出下一位";
+                    updateDrawUI(); // Prepare UI for next prize immediately after delay
+                } else {
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                    btn.innerText = "查看抽獎結果";
+                    btn.onclick = showResults;
+                }
+            }, 1500); // Wait 1.5s showing the winner before allowing next draw
+        }
+
+        // --- Results & Export ---
+        function showResults() {
+            switchView('view-results');
+            const tbody = document.getElementById('results-table-body');
+            tbody.innerHTML = '';
+            
+            winners.forEach(w => {
+                const tr = document.createElement('tr');
+                tr.className = "border-b border-gray-800 hover:bg-gray-900 transition";
+                tr.innerHTML = `
+                    <td class="py-3 text-gray-400">${w.prizeCode}</td>
+                    <td class="py-3 text-white font-bold">${w.prizeName}</td>
+                    <td class="py-3">${w.participantId}</td>
+                    <td class="py-3">${w.name}</td>
+                    <td class="py-3">${w.phone}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function downloadCSV() {
+            if (winners.length === 0) {
+                alert("目前無得獎資料可匯出！");
+                return;
+            }
+
+            // Prepare CSV content with BOM for Excel compatibility (UTF-8)
+            let csvContent = "\uFEFF"; 
+            csvContent += "獎品代碼,獎品名稱,中獎者編號,中獎者姓名,聯絡電話\n";
+
+            winners.forEach(w => {
+                // Escape quotes just in case
+                const row = [
+                    `"${w.prizeCode}"`, 
+                    `"${w.prizeName}"`, 
+                    `"${w.participantId}"`, 
+                    `"${w.name}"`, 
+                    `"${w.phone}"`
+                ];
+                csvContent += row.join(",") + "\n";
+            });
+
+            // Create Blob and Trigger Download
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            
+            // Get current timestamp for filename
+            const dateStr = new Date().toISOString().slice(0,10).replace(/-/g,"");
+            
+            link.setAttribute("href", url);
+            link.setAttribute("download", `AMD_LuckyDraw_Results_${dateStr}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // --- Utility ---
+        function toggleFullScreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.log(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+                });
+            } else {
+                document.exitFullscreen();
+            }
+        }
+    </script>
+</body>
+</html>
